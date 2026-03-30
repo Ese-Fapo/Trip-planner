@@ -1,12 +1,14 @@
 
 import './App.css'
+import Hero from './components/ui/custom/Hero'
 
 function App() {
  
 
   return (
     <>
-    <h1>hello</h1>
+    {/**hero section */}
+    <Hero />
     </>
   )
 }
