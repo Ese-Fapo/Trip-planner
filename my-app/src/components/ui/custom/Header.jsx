@@ -7,7 +7,7 @@ const Header = () => {
     
     <div className='flex items-center justify-between p-3 shadow-sm'>
       <Link to='/' className='relative'>
-        <div className='absolute inset-0 -z-10 rounded-full bg-gradient-to-r from-cyan-400 via-sky-500 to-violet-500 opacity-60 blur-xl' />
+        <div className='absolute inset-0 -z-10 rounded-full bg-linear-to-r from-cyan-400 via-sky-500 to-violet-500 opacity-60 blur-xl' />
         <img
           src='/logo.svg'
           className='h-10 w-auto drop-shadow-[0_0_18px_rgba(59,130,246,0.55)]'

@@ -6,7 +6,7 @@ import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom'
 import CreateTrip from './create-trip/index.jsx'
 import Header from './components/ui/custom/Header'
 
-const RootLayout = () => (
+export const RootLayout = () => (
   <>
     <Header />
     <Outlet />
