@@ -1,15 +1,11 @@
 
-import './App.css'
 import Hero from './components/ui/custom/Hero'
 
 function App() {
- 
-
   return (
-    <>
-    {/**hero section */}
-    <Hero />
-    </>
+    <main className="px-4 pb-12 pt-4 sm:px-6 lg:px-8">
+      <Hero />
+    </main>
   )
 }
 

@@ -5,6 +5,7 @@ import App from './App.jsx'
 import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom'
 import CreateTrip from './create-trip/index.jsx'
 import Header from './components/ui/custom/Header'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 
 export const RootLayout = () => (
   <>
@@ -31,8 +32,17 @@ const router = createBrowserRouter([
 ]);
 
 
+const googleClientId = import.meta.env.VITE_GOOGLE_AUTH_CLIENT_ID
+const appRouter = <RouterProvider router={router} />
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    {googleClientId ? (
+      <GoogleOAuthProvider clientId={googleClientId}>
+        {appRouter}
+      </GoogleOAuthProvider>
+    ) : (
+      appRouter
+    )}
   </StrictMode>,
 )
