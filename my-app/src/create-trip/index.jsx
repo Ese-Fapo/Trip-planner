@@ -21,53 +21,12 @@ import {
 } from "@/components/ui/dialog";
 import { useLocation } from "react-router-dom";
 
-const GoogleSignInButton = ({
-  onSuccess,
-  disabled,
-  autoStart = false,
-  onAutoStartHandled,
-}) => {
-  const login = useGoogleLogin({
-    flow: "implicit",
-    onSuccess: async (tokenResponse) => {
-      try {
-        const response = await fetch(
-          `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${tokenResponse.access_token}`,
-        );
-
-        if (!response.ok) {
-          throw new Error("Unable to fetch Google profile.");
-        }
-
-        const userProfile = await response.json();
-        onSuccess(userProfile);
-      } catch (error) {
-        toast.error(error?.message || "Google sign-in failed. Please try again.", {
-          position: "top-center",
-          autoClose: 3000,
-        });
-      }
-    },
-    onError: () => {
-      toast.error("Google sign-in failed. Please try again.", {
-        position: "top-center",
-        autoClose: 3000,
-      });
-    },
-  });
-
-  useEffect(() => {
-    if (autoStart && !disabled) {
-      login();
-      onAutoStartHandled?.();
-    }
-  }, [autoStart, disabled, login, onAutoStartHandled]);
-
+const GoogleSignInButton = ({ onClick, disabled, isSigningIn }) => {
   return (
     <Button
       variant="outline"
       className="group flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white py-6 text-sm font-semibold text-slate-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 hover:text-slate-900"
-      onClick={() => login()}
+      onClick={onClick}
       disabled={disabled}
     >
       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white">
@@ -78,7 +37,7 @@ const GoogleSignInButton = ({
           <path fill="#EA4335" d="M12 5.98c1.47 0 2.79.5 3.83 1.48l2.87-2.87C16.95 2.96 14.7 2 12 2A10 10 0 0 0 3.1 7.5l3.34 2.58c.78-2.35 2.97-4.1 5.56-4.1Z" />
         </svg>
       </span>
-      <span>{disabled ? "Opening Google..." : "Sign in with Google"}</span>
+      <span>{isSigningIn ? "Opening Google..." : "Sign in with Google"}</span>
     </Button>
   );
 };
@@ -104,7 +63,7 @@ const CreateTrip = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [tripResult, setTripResult] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
-  const [autoOpenGoogleAuth, setAutoOpenGoogleAuth] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(getStoredUser);
   const placesApiKey = import.meta.env.VITE_GOOGLE_PLACE_API_KEY;
   const googleAuthClientId = import.meta.env.VITE_GOOGLE_AUTH_CLIENT_ID;
@@ -116,14 +75,79 @@ const CreateTrip = () => {
     }));
   };
 
+  const handleGoogleLoginError = (message) => {
+    setIsSigningIn(false);
+    toast.error(message || "Google sign-in failed. Please try again.", {
+      position: "top-center",
+      autoClose: 3000,
+    });
+  };
+
+  const startGoogleLogin = useGoogleLogin({
+    flow: "implicit",
+    scope: "openid profile email",
+    prompt: "select_account",
+    onSuccess: async (tokenResponse) => {
+      try {
+        const response = await fetch(
+          `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${tokenResponse.access_token}`,
+        );
+
+        if (!response.ok) {
+          throw new Error("Unable to fetch Google profile.");
+        }
+
+        const userProfile = await response.json();
+        setIsSigningIn(false);
+        await handleGoogleAuthSuccess(userProfile);
+      } catch (error) {
+        handleGoogleLoginError(error?.message);
+      }
+    },
+    onError: () => {
+      handleGoogleLoginError();
+    },
+    onNonOAuthError: (nonOAuthError) => {
+      const popupMessage =
+        nonOAuthError?.type === "popup_failed_to_open"
+          ? "Google sign-in popup was blocked. Please allow popups and try again."
+          : nonOAuthError?.type === "popup_closed"
+            ? "Google sign-in was cancelled before completion."
+            : "Google sign-in failed. Please try again.";
+
+      handleGoogleLoginError(popupMessage);
+    },
+  });
+
+  const openSignInDialog = (startPopup = false) => {
+    setOpenDialog(true);
+
+    if (startPopup && googleAuthClientId) {
+      setIsSigningIn(true);
+      startGoogleLogin({ prompt: "select_account" });
+    }
+  };
+
+  const handleManualGoogleSignIn = () => {
+    if (!googleAuthClientId) {
+      toast.error("Google sign-in is not configured yet.", {
+        position: "top-center",
+        autoClose: 3000,
+      });
+      return;
+    }
+
+    setIsSigningIn(true);
+    startGoogleLogin({ prompt: "select_account" });
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
 
     if (params.get("signin") === "1") {
       setOpenDialog(true);
-      setAutoOpenGoogleAuth(Boolean(googleAuthClientId));
     }
-  }, [googleAuthClientId, location.search]);
+  }, [location.search]);
 
   const handleGoogleAuthSuccess = async (userProfile) => {
     const normalizedUser = {
@@ -159,8 +183,7 @@ const CreateTrip = () => {
         return;
       }
 
-      setOpenDialog(true);
-      setAutoOpenGoogleAuth(true);
+      openSignInDialog(true);
       return;
     }
 
@@ -405,7 +428,7 @@ const CreateTrip = () => {
             <Button
               variant="outline"
               className="border-slate-300"
-              onClick={() => setOpenDialog(true)}
+              onClick={() => openSignInDialog(false)}
             >
               {currentUser?.email ? "Switch account" : "Sign in with Google"}
             </Button>
@@ -456,10 +479,9 @@ const CreateTrip = () => {
 
                   {googleAuthClientId ? (
                     <GoogleSignInButton
-                      onSuccess={handleGoogleAuthSuccess}
-                      disabled={isGenerating}
-                      autoStart={autoOpenGoogleAuth}
-                      onAutoStartHandled={() => setAutoOpenGoogleAuth(false)}
+                      onClick={handleManualGoogleSignIn}
+                      disabled={isGenerating || isSigningIn}
+                      isSigningIn={isSigningIn}
                     />
                   ) : (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
