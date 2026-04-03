@@ -158,32 +158,32 @@ const CreateTrip = () => {
 
     if (typeof window !== "undefined") {
       localStorage.setItem("User", JSON.stringify(normalizedUser));
+      window.dispatchEvent(new Event("storage"));
     }
 
     setCurrentUser(normalizedUser);
-
     setOpenDialog(false);
-    toast.success(`Welcome ${userProfile?.given_name || userProfile?.name || "traveler"}!`, {
-      position: "top-center",
-      autoClose: 2000,
-    });
+    setIsSigningIn(false);
 
-    await OnGenerateTrip(true);
+    toast.success(
+      `Welcome ${userProfile?.given_name || userProfile?.name || "traveler"}! You can now generate your trip.`,
+      {
+        position: "top-center",
+        autoClose: 2200,
+      },
+    );
   };
 
-  const OnGenerateTrip = async (skipUserCheck = false) => {
-    const user = typeof window !== "undefined" ? localStorage.getItem("User") : null;
+  const OnGenerateTrip = async () => {
+    const user = currentUser || getStoredUser();
 
-    if (!skipUserCheck && !user) {
-      if (!googleAuthClientId) {
-        toast.error("Google sign-in is required before generating a trip.", {
-          position: "top-center",
-          autoClose: 3000,
-        });
-        return;
-      }
+    if (!user?.email) {
+      toast.info("Please sign in with Google to generate your trip.", {
+        position: "top-center",
+        autoClose: 2500,
+      });
 
-      openSignInDialog(true);
+      openSignInDialog(false);
       return;
     }
 
@@ -416,12 +416,12 @@ const CreateTrip = () => {
               <h3 className="text-base font-semibold text-slate-900 sm:text-lg">
                 {currentUser?.email
                   ? `Signed in as ${currentUser.name}`
-                  : "Authentication is required before generating a trip"}
+                  : "Sign in to unlock AI trip generation"}
               </h3>
               <p className="mt-1 text-sm text-slate-600">
                 {currentUser?.email
                   ? currentUser.email
-                  : "Click Generate Trip and you'll be asked to sign in with Google first."}
+                  : "Log in with Google first, then generate your personalized trip itinerary."}
               </p>
             </div>
 
@@ -438,10 +438,14 @@ const CreateTrip = () => {
         <div className="mt-8 flex justify-center sm:justify-end">
           <Button
             className="w-full bg-blue-600 px-6 py-6 text-base text-amber-50 hover:bg-blue-500 sm:w-auto sm:text-lg"
-            onClick={OnGenerateTrip}
-            disabled={isGenerating}
+            onClick={currentUser?.email ? OnGenerateTrip : () => openSignInDialog(false)}
+            disabled={isGenerating || isSigningIn}
           >
-            {isGenerating ? "Generating..." : "Generate Trip"}
+            {isGenerating
+              ? "Generating..."
+              : currentUser?.email
+                ? "Generate Trip"
+                : "Sign in to Generate Trip"}
           </Button>
         </div>
 
