@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useGoogleLogin } from "@react-oauth/google";
-import GooglePlacesAutocomplete from "react-google-places-autocomplete";
+import { googleLogout, useGoogleLogin } from "@react-oauth/google";
 import { Input } from "@/components/ui/input";
 import {
   AI_PROMPT,
@@ -57,6 +56,9 @@ const getStoredUser = () => {
 const CreateTrip = () => {
   const location = useLocation();
   const [place, setPlace] = useState();
+  const [destinationInput, setDestinationInput] = useState("");
+  const [destinationSuggestions, setDestinationSuggestions] = useState([]);
+  const [isLoadingDestinations, setIsLoadingDestinations] = useState(false);
   const [formData, setFormData] = useState({});
   const [selectedBudget, setSelectedBudget] = useState(null);
   const [selectedTravelers, setSelectedTravelers] = useState(null);
@@ -81,6 +83,26 @@ const CreateTrip = () => {
       position: "top-center",
       autoClose: 3000,
     });
+  };
+
+  const handleDestinationChange = (value) => {
+    setDestinationInput(value);
+
+    if (!value) {
+      setPlace(undefined);
+      handleInputChange("location", "");
+      return;
+    }
+
+    const matchedSuggestion = destinationSuggestions.find(
+      (item) => item.label.toLowerCase() === value.toLowerCase(),
+    );
+
+    setPlace({
+      label: value,
+      value: matchedSuggestion?.value || value,
+    });
+    handleInputChange("location", value);
   };
 
   const startGoogleLogin = useGoogleLogin({
@@ -142,12 +164,94 @@ const CreateTrip = () => {
   };
 
   useEffect(() => {
+    const syncUser = () => setCurrentUser(getStoredUser());
+
+    window.addEventListener("storage", syncUser);
+    window.addEventListener("focus", syncUser);
+    syncUser();
+
+    return () => {
+      window.removeEventListener("storage", syncUser);
+      window.removeEventListener("focus", syncUser);
+    };
+  }, []);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
 
     if (params.get("signin") === "1") {
       setOpenDialog(true);
     }
   }, [location.search]);
+
+  useEffect(() => {
+    if (!placesApiKey) {
+      setDestinationSuggestions([]);
+      setIsLoadingDestinations(false);
+      return;
+    }
+
+    const query = destinationInput.trim();
+
+    if (query.length < 3) {
+      setDestinationSuggestions([]);
+      setIsLoadingDestinations(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timerId = window.setTimeout(async () => {
+      try {
+        setIsLoadingDestinations(true);
+
+        const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": placesApiKey,
+            "X-Goog-FieldMask": "suggestions.placePrediction.text.text,suggestions.placePrediction.placeId",
+          },
+          body: JSON.stringify({
+            input: query,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error("Unable to load destination suggestions.");
+        }
+
+        const data = await response.json();
+        const suggestions = (data?.suggestions || [])
+          .map((item, index) => {
+            const label = item?.placePrediction?.text?.text;
+
+            if (!label) {
+              return null;
+            }
+
+            return {
+              label,
+              value: item?.placePrediction?.placeId || `${label}-${index}`,
+            };
+          })
+          .filter(Boolean);
+
+        setDestinationSuggestions(suggestions);
+      } catch (error) {
+        if (error?.name !== "AbortError") {
+          setDestinationSuggestions([]);
+        }
+      } finally {
+        setIsLoadingDestinations(false);
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timerId);
+    };
+  }, [destinationInput, placesApiKey]);
 
   const handleGoogleAuthSuccess = async (userProfile) => {
     const normalizedUser = {
@@ -172,6 +276,23 @@ const CreateTrip = () => {
         autoClose: 2200,
       },
     );
+  };
+
+  const handleLogout = () => {
+    googleLogout();
+
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("User");
+      window.dispatchEvent(new Event("storage"));
+    }
+
+    setCurrentUser(null);
+    setOpenDialog(false);
+
+    toast.success("You have been logged out.", {
+      position: "top-center",
+      autoClose: 2000,
+    });
   };
 
   const OnGenerateTrip = async () => {
@@ -291,36 +412,34 @@ const CreateTrip = () => {
                 What is your destination of choice?
               </p>
 
-              <div className="mt-3">
+              <div className="mt-3 space-y-2">
+                <Input
+                  className="h-11 text-base"
+                  placeholder="Search for a city or country"
+                  type="text"
+                  autoComplete="off"
+                  list={placesApiKey ? "destination-suggestions" : undefined}
+                  value={destinationInput}
+                  onChange={(e) => handleDestinationChange(e.target.value)}
+                />
+
                 {placesApiKey ? (
-                  <GooglePlacesAutocomplete
-                    apiKey={placesApiKey}
-                    selectProps={{
-                      value: place,
-                      placeholder: "Search for a city or country",
-                      onChange: (v) => {
-                        setPlace(v);
-                        handleInputChange("location", v?.label || "");
-                      },
-                    }}
-                  />
-                ) : (
-                  <div className="space-y-2">
-                    <Input
-                      className="h-11 text-base"
-                      placeholder="Enter a city or country manually"
-                      type="text"
-                      value={place?.label || ""}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setPlace({ label: value, value });
-                        handleInputChange("location", value);
-                      }}
-                    />
-                    <p className="text-xs text-amber-600 sm:text-sm">
-                      Google Places API is not configured yet, so manual destination entry is enabled.
+                  <>
+                    <datalist id="destination-suggestions">
+                      {destinationSuggestions.map((item) => (
+                        <option key={item.value} value={item.label} />
+                      ))}
+                    </datalist>
+                    <p className="text-xs text-slate-500 sm:text-sm">
+                      {isLoadingDestinations
+                        ? "Loading destination suggestions..."
+                        : "Start typing at least 3 letters to get Google place suggestions."}
                     </p>
-                  </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-amber-600 sm:text-sm">
+                    Google Places API is not configured yet, so manual destination entry is enabled.
+                  </p>
                 )}
               </div>
             </div>
@@ -428,9 +547,9 @@ const CreateTrip = () => {
             <Button
               variant="outline"
               className="border-slate-300"
-              onClick={() => openSignInDialog(false)}
+              onClick={currentUser?.email ? handleLogout : () => openSignInDialog(false)}
             >
-              {currentUser?.email ? "Switch account" : "Sign in with Google"}
+              {currentUser?.email ? "Logout" : "Sign in with Google"}
             </Button>
           </div>
         </section>

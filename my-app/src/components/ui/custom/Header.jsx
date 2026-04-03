@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { googleLogout } from '@react-oauth/google'
 import { Button } from '../button'
 import { Link } from 'react-router-dom'
 
@@ -30,6 +31,13 @@ const Header = () => {
     }
   }, [])
 
+  const handleLogout = () => {
+    googleLogout()
+    localStorage.removeItem('User')
+    window.dispatchEvent(new Event('storage'))
+    setUser(null)
+  }
+
   return (
     <header className='sticky top-0 z-50 border-b border-slate-100 bg-white/90 backdrop-blur'>
       <div className='mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8'>
@@ -43,7 +51,7 @@ const Header = () => {
         </Link>
 
         {user?.email ? (
-          <div className='flex w-full items-center justify-end gap-3 sm:w-auto'>
+          <div className='flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto'>
             {user.picture ? (
               <img
                 src={user.picture}
@@ -63,6 +71,14 @@ const Header = () => {
               </p>
               <p className='truncate text-xs text-slate-500'>{user.email}</p>
             </div>
+
+            <Button
+              variant='outline'
+              className='border-slate-300 text-slate-700 hover:bg-slate-100'
+              onClick={handleLogout}
+            >
+              Logout
+            </Button>
           </div>
         ) : (
           <Button
