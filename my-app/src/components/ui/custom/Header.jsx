@@ -1,19 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { googleLogout } from '@react-oauth/google'
 import { Button } from '../button'
 import { Link } from 'react-router-dom'
-
-const getStoredUser = () => {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  try {
-    return JSON.parse(localStorage.getItem('User') || 'null')
-  } catch {
-    return null
-  }
-}
+import { getStoredUser } from '@/components/login/login'
+import LogoutButton from '@/components/login/logout'
 
 const Header = () => {
   const [user, setUser] = useState(getStoredUser)
@@ -30,13 +19,6 @@ const Header = () => {
       window.removeEventListener('focus', syncUser)
     }
   }, [])
-
-  const handleLogout = () => {
-    googleLogout()
-    localStorage.removeItem('User')
-    window.dispatchEvent(new Event('storage'))
-    setUser(null)
-  }
 
   return (
     <header className='sticky top-0 z-50 border-b border-slate-100 bg-white/90 backdrop-blur'>
@@ -72,13 +54,10 @@ const Header = () => {
               <p className='truncate text-xs text-slate-500'>{user.email}</p>
             </div>
 
-            <Button
-              variant='outline'
+            <LogoutButton
               className='border-slate-300 text-slate-700 hover:bg-slate-100'
-              onClick={handleLogout}
-            >
-              Logout
-            </Button>
+              onLogout={() => setUser(null)}
+            />
           </div>
         ) : (
           <Button
