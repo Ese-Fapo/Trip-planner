@@ -1,11 +1,22 @@
 import React, { useEffect, useState } from 'react'
 import { Button } from '../button'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { getStoredUser } from '@/components/login/login'
 import LogoutButton from '@/components/login/logout'
 
 const Header = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [user, setUser] = useState(getStoredUser)
+
+  const handleSignInClick = () => {
+    if (location.pathname === '/create-trip') {
+      window.dispatchEvent(new Event('open-signin-dialog'))
+      return
+    }
+
+    navigate('/create-trip?signin=1')
+  }
 
   useEffect(() => {
     const syncUser = () => setUser(getStoredUser())
@@ -61,11 +72,11 @@ const Header = () => {
           </div>
         ) : (
           <Button
-            asChild
             className='w-full bg-black px-4 py-2 text-sm text-white hover:bg-neutral-800 sm:w-auto sm:px-5'
             size='lg'
+            onClick={handleSignInClick}
           >
-            <Link to='/create-trip?signin=1'>Sign In</Link>
+            Sign In
           </Button>
         )}
       </div>

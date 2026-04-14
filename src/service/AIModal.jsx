@@ -3,6 +3,8 @@ import { GoogleGenAI } from "@google/genai";
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY;
 
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const MODEL_CANDIDATES = ["gemini-2.5-flash", "gemini-2.0-flash"];
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 
 const cleanJsonResponse = (text) => {
   if (!text) return "";
@@ -98,29 +100,77 @@ const buildFallbackTripPlan = (prompt) => {
   };
 };
 
+const getStatusCode = (error) =>
+  Number(
+    error?.status ||
+      error?.code ||
+      error?.response?.status ||
+      error?.error?.code,
+  ) || null;
+
+const isRetryableError = (error) => {
+  const message = String(error?.message || "").toLowerCase();
+  const statusCode = getStatusCode(error);
+
+  return (
+    (statusCode && RETRYABLE_STATUS_CODES.has(statusCode)) ||
+    message.includes("503") ||
+    message.includes("unavailable") ||
+    message.includes("high demand")
+  );
+};
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const requestTripPlan = async (prompt) => {
+  let lastError;
+
+  for (const model of MODEL_CANDIDATES) {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+          },
+        });
+
+        const rawText =
+          typeof response?.text === "function" ? await response.text() : response?.text;
+        const cleaned = cleanJsonResponse(rawText);
+
+        if (cleaned) {
+          return JSON.parse(cleaned);
+        }
+
+        throw new Error("Empty AI response.");
+      } catch (error) {
+        lastError = error;
+
+        if (!isRetryableError(error)) {
+          throw error;
+        }
+
+        if (attempt < 2) {
+          await wait(700 * attempt);
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error("AI service is temporarily unavailable.");
+};
+
 export const generateTripPlan = async (prompt) => {
   if (!ai) {
     return buildFallbackTripPlan(prompt);
   }
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-    },
-  });
-
-  const rawText = typeof response?.text === "function" ? await response.text() : response?.text;
-  const cleaned = cleanJsonResponse(rawText);
-
-  if (!cleaned) {
-    return buildFallbackTripPlan(prompt);
-  }
-
   try {
-    return JSON.parse(cleaned);
-  } catch {
+    return await requestTripPlan(prompt);
+  } catch (error) {
+    console.warn("Gemini API unavailable, using local fallback itinerary.", error);
     return buildFallbackTripPlan(prompt);
   }
 };

@@ -127,6 +127,16 @@ const CreateTrip = () => {
   }, [location.search]);
 
   useEffect(() => {
+    const openDialogFromHeader = () => setOpenDialog(true);
+
+    window.addEventListener("open-signin-dialog", openDialogFromHeader);
+
+    return () => {
+      window.removeEventListener("open-signin-dialog", openDialogFromHeader);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!placesApiKey) {
       setDestinationSuggestions([]);
       setIsLoadingDestinations(false);
